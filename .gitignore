@@ -1,4 +1,6 @@
 .env
 node_modules/
 dist/**
+public/dist/
+dist/*
 public/
