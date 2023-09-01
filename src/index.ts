@@ -1,34 +1,41 @@
 import express, {Express, Request, Response} from 'express';
+import { Send } from "express-serve-static-core";
 import dotenv from 'dotenv';
-import {writeFileSync, createWriteStream} from 'fs';
-import { Game, PromptStream } from './game';
+import { Game, PromptStream, createNewGame } from './game';
 import cors from 'cors';
 import { generateImage } from './imageGenerator';
 dotenv.config();
+const port = process.env.PORT;
 
 const app = express();
-// allow cors
+// set up middleware
 app.use(cors());
-const port = process.env.PORT;
-const API_TOKEN = process.env.API_TOKEN;
-const currentGame: Game = {
-    status: 'PENDING',
-    promptStreams: new Map<string, PromptStream>()
-};
+app.use(express.static('public'))
+app.use(express.json())
 
+
+
+// initialize global game 
+const currentGame: Game = createNewGame();
+
+// define this to make typing requests easier
 export interface TypedRequestBody<T> extends Express.Request {
     body: T
 }
-
+export interface TypedResponseBody<T> extends Response {
+    ResBody: T
+}
+export interface TypedResponse<ResBody> extends Express.Response {
+    json: Send<ResBody, this>;
+}
 
 app.get('/', (req: Request, res: Response) => {
   res.send('Genestrations backend');
 });
 
-app.use(express.static('public'))
-app.use(express.json())
 type RegisterRequest = TypedRequestBody<{player: string, prompt: string}>;
-app.post('/register', async (req: RegisterRequest, res: Response) => {
+type RegisterResponse = TypedResponse<{players: string[]}>;
+app.post('/register', async (req: RegisterRequest, res: RegisterResponse) => {
     console.log(JSON.stringify(req.body));
     if (currentGame.status === 'PENDING') {
         // create a new prompt stream for player
@@ -44,12 +51,13 @@ app.post('/register', async (req: RegisterRequest, res: Response) => {
         const fn = generateImage(req.body.prompt);
         playerPromptStream[0].image = (await fn);
         console.log(`Saved image ${playerPromptStream[0].image}`);
-        // todo return number/names of other players?
-        const players = currentGame.promptStreams.keys();
-        res.send(JSON.stringify(players));
+        
+        // return number/names of other players?
+        const players = [ ...currentGame.promptStreams.keys() ];
+        res.json({players: players});
     } else {
         console.log('Cannot register player when game is running.');
-        res.sendStatus(500);
+        res.json({players: []});
     }
 });
 
