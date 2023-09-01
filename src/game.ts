@@ -5,9 +5,9 @@ export type Round = {
 
 export type PromptStream = Round[]
 
-
+export type GameStatus = 'PENDING' | 'RUNNING' | 'FINISHED';
 export type Game = {
-    status: 'PENDING' | 'RUNNING' | 'FINISHED',
+    status: GameStatus,
     promptStreams: Map<string, PromptStream>
 }
 
