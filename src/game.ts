@@ -17,15 +17,14 @@ export type PlayerList = {
 
 export type Game = {
     status: GameStatus,
-    promptStreams: Map<string, PromptStreamQueue>
-    playerPositions: Map<string, string>
+    playerInbox: Map<string, PromptStreamQueue>
+    playerOutbox: Map<string, PromptStreamQueue>
 }
 
 export function createNewGame(): Game {
     return {
         status: 'PENDING',
-        promptStreams: new Map<string, PromptStreamQueue>(),
-        playerPositions: new Map<string, string>()
+        players: new Map<string, PromptStreamQueue>(),
     };
 }
 
@@ -36,7 +35,7 @@ export function addPlayerToGame(game: Game, player: string, prompt: string, imag
     // create a new prompt stream for player
     const playerPromptStream: PromptStream = [{prompt: prompt, image: imageUrl, player: player }];
 
-    game.promptStreams.set(player, [ playerPromptStream ]);
+    game.playerOutbox.set(player, [ playerPromptStream ]);
 
     return true;
 }
