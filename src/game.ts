@@ -1,35 +1,70 @@
 export type Round = {
     prompt: string,
     image: string | null,
+    player: string
 }
 
 export type PromptStream = Round[]
 
+export type PromptStreamQueue = PromptStream[]
+
 export type GameStatus = 'PENDING' | 'RUNNING' | 'FINISHED';
+
+export type PlayerList = {
+    player: string,
+    nextPlayer: PlayerList
+}
+
 export type Game = {
     status: GameStatus,
-    promptStreams: Map<string, PromptStream>
-    playerPositions: Map<string, string | undefined>
+    promptStreams: Map<string, PromptStreamQueue>
+    playerPositions: Map<string, string>
 }
 
 export function createNewGame(): Game {
     return {
         status: 'PENDING',
-        promptStreams: new Map<string, PromptStream>(),
-        playerPositions: new Map<string, string | undefined>()
+        promptStreams: new Map<string, PromptStreamQueue>(),
+        playerPositions: new Map<string, string>()
     };
 }
 
-export function addPlayerToGame(game: Game, player: string, prompt: string, imageUrl: string): Game {
+export function addPlayerToGame(game: Game, player: string, prompt: string, imageUrl: string): boolean {
+    if ( game.status === "RUNNING" ){
+        return false;
+    }
     // create a new prompt stream for player
-    const playerPromptStream: PromptStream = [{prompt: prompt, image: imageUrl }];
+    const playerPromptStream: PromptStream = [{prompt: prompt, image: imageUrl, player: player }];
 
-    // start player pointer to last player
-    const lastPlayer = [ ...game.promptStreams.keys()].pop();
+    game.promptStreams.set(player, [ playerPromptStream ]);
 
-    game.promptStreams.set(player, playerPromptStream);
-    game.playerPositions.set(player, lastPlayer);
-    return game;
+    return true;
+}
+
+export function startGame(game: Game) {
+    const players = [ ...game.promptStreams.keys()];
+    
+    // create positions map
+    for (let i=0; i < players.length - 1; i++) {
+        game.playerPositions.set(players[i], players[i+1]);
+    }
+    game.playerPositions.set(players[players.length], players[0]);
+
+    // update queues
+    for (let player in players) {
+        // pop item off player's prompt stream
+        const item = game.promptStreams.get(player)?.shift();
+
+        // pass to next player
+        const nextPlayer = game.playerPositions.get(player);
+
+        if (item === undefined || nextPlayer === undefined) {
+            console.log('error')
+            return
+        }
+        game.promptStreams.get(nextPlayer)?.push(item);
+    }
+    
 }
 
 export function insertPlayerGuess(game: Game, player: string, prompt: string, imageUrl: string) : boolean {
@@ -49,6 +84,16 @@ export function insertPlayerGuess(game: Game, player: string, prompt: string, im
     }
 
     // update pointer
+    const playersInOrder = [ ...game.playerPositions.keys() ];
+    const currentPlayerPosition = game.playerPositions.get(player);
+    if (currentPlayerPosition === undefined) {
+        return false;
+    }
+
+    const currentPlayerIndex = playersInOrder.indexOf(currentPlayerPosition);
+    const nextPlayerPosition = (currentPlayerIndex - 1 >= 0) ? currentPlayerIndex - 1 : playersInOrder.length; // wrap around to back of list
+    console.log(`Updating position for ${player} from ${currentPlayerIndex} to ${nextPlayerPosition}`);
+    game.playerPositions.set(player, playersInOrder[nextPlayerPosition]);
 
     return true;
 }
