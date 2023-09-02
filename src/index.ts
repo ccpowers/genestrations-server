@@ -38,13 +38,9 @@ type RegisterResponse = TypedResponse<{success: boolean, msg?: string, players?:
 app.post('/register', async (req: RegisterRequest, res: RegisterResponse) => {
     console.log(JSON.stringify(req.body));
     if (currentGame.status === 'PENDING') {
-        // create a new prompt stream for player
-        const playerPromptStream: PromptStream = [{prompt: req.body.player, image: null }];
-
         // insert into game
         // todo ensure player has unique name
-        currentGame.promptStreams.set(req.body.player, playerPromptStream);
-
+        currentGame = addPlayerToGame(currentGame, req.body.player, req.body.prompt);
         console.log(`Added ${req.body.player} with prompt ${req.body.prompt}`);
 
         // kick off request to create image
