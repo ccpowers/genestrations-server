@@ -32,10 +32,10 @@ describe("game", () => {
 
     it("should update player position when guess submitted", () => {
         const game = createNewGame();
-        addPlayerToGame(game, "playerA", "promptA0", "imageA0");
-        addPlayerToGame(game, "playerB", "promptB0", "imageB0");
-        addPlayerToGame(game, "playerC", "promptC0", "imageC0");
-        addPlayerToGame(game, "playerD", "promptD0", "imageD0");
+        addPlayerToGame(game, "playerA", "promptA0");
+        addPlayerToGame(game, "playerB", "promptB0");
+        addPlayerToGame(game, "playerC", "promptC0");
+        addPlayerToGame(game, "playerD", "promptD0");
 
         const running = startGame(game, mockImageGeneratorFactory);
         
@@ -53,10 +53,30 @@ describe("game", () => {
         playerC = doInboxCheckForPlayer(playerC);
         assert.isTrue(playerC.status === 'GUESSING', 'Player C is not guessing');
         assert(playerC.status === "GUESSING");
-        insertPlayerGuess(playerC, "guessC1");
+        playerC = insertPlayerGuess(playerC, "guessC1");
         
-        // player C should have no current items until player D guesses
+        // player C should have no current items until player B guesses
+        playerC = doInboxCheckForPlayer(playerC);
+        assert.strictEqual(playerC.status, 'WAITING');
 
+        // get player B to guess
+        let playerB = running.players.get("playerB");
+        assert(!!playerB);
+        assert(playerB.status === 'WAITING');
+        playerB = doInboxCheckForPlayer(playerB);
+        assert(playerB.status === 'GUESSING');
+        playerB = insertPlayerGuess(playerB, "guessB1");
+        
+
+        // check player C inbox again
+        assert(playerC.status === "WAITING");
+        playerC = doInboxCheckForPlayer(playerC);
+
+        assert.equal(playerC.status, "GUESSING");
+        let playerD = running.players.get("playerD");
+        assert(playerD !== undefined && playerD.status === 'WAITING');
+        playerD = doInboxCheckForPlayer(playerD);
+        console.log(`${JSON.stringify(playerD.inbox)}`)
     })
 
 
