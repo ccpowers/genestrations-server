@@ -59,7 +59,7 @@ export function addPlayerToGame(game: PendingGame, player: string, prompt: strin
     game.initialPrompts.set(player, prompt);
 }
 
-export function startGame(pending: PendingGame, imageGeneratorFactory: ImageGeneratorFactory) : Game | false {
+export function startGame(pending: PendingGame, imageGeneratorFactory: ImageGeneratorFactory) : Game | PendingGame {
     const game: Game = {
         status: 'RUNNING',
         players: new Map<string, PlayerUnion>(),
@@ -91,14 +91,14 @@ export function startGame(pending: PendingGame, imageGeneratorFactory: ImageGene
 
         if (nextPlayer === undefined ) {
             console.log(`No next player for player ${player}. Cannot start game.`);
-            return false;
+            return pending;
         }
 
         const nextPlayerInbox = playerQueues.get(nextPlayer);
 
         if (playerInbox === undefined || nextPlayerInbox === undefined) {
             console.log(`Either ${player} or ${nextPlayer} is missing inbox. Cannot start game.`);
-            return false;
+            return pending;
         }
 
         const playerImageGenerator = imageGeneratorFactory(nextPlayerInbox, player);
@@ -106,7 +106,7 @@ export function startGame(pending: PendingGame, imageGeneratorFactory: ImageGene
         const playerInitialPrompt = pending.initialPrompts.get(player);
         if (playerInitialPrompt === undefined) {
             console.log(`Player initial prompt for ${player} is undefined, wtf`);
-            return false;
+            return pending;
         }
         console.log(`Generating initial image for ${player} with prompt ${playerInitialPrompt}`)
         playerImageGenerator(playerInitialPrompt, [])
@@ -141,15 +141,13 @@ export function insertPlayerGuess(player: GuessingPlayer, prompt: string) : Wait
 
 }
 
-
-
 export function doInboxCheckForPlayer(player: WaitingPlayer) : WaitingPlayer | GuessingPlayer {
     // if inbox is not empty, return guessing player
     if (player.inbox.length === 0) {
         return player;
     } else {
         // get first item out of inbox
-        const current = player.inbox.pop();
+        const current = player.inbox.shift();
 
         // we've already checked inbox length, but whatever
         if (current === undefined) {
@@ -167,4 +165,8 @@ export function doInboxCheckForPlayer(player: WaitingPlayer) : WaitingPlayer | G
     }
 
 
+}
+
+export function getImageUrlForGuessingPlayer(player: GuessingPlayer) : string {
+    return player.current[player.current.length-1].image;
 }
