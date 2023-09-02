@@ -1,3 +1,5 @@
+import { ImageGenerator, ImageGeneratorFactory } from "./imageGenerator";
+
 export type Round = {
     prompt: string,
     image: string | null,
@@ -15,100 +17,140 @@ export type PlayerList = {
     nextPlayer: PlayerList
 }
 
-export type Game = {
-    status: GameStatus,
-    players: Map<string, PlayerState>,
-    nextPlayer: Map<string, string>
-}
+export type WaitingPlayer = {
+    status: 'WAITING',
+} & PlayerState;
+
+export type GuessingPlayer = {
+    status: 'GUESSING',
+    current: PromptStream
+} & PlayerState;
 
 export type PlayerState = {
-    current: PromptStream | null,
+    playerImageGenerator: ImageGenerator,
     inbox: PromptStreamQueue
 }
 
-export function createNewGame(): Game {
+export type PendingGame = {
+    status: 'PENDING',
+    initialPrompts: Map<string, string>
+}
+
+export type PlayerUnion = (GuessingPlayer | WaitingPlayer);
+export type Game = {
+    status: 'RUNNING',
+    players: Map<string, PlayerUnion>,
+    nextPlayer: Map<string, string>,
+}
+
+/**export type FinalizedGame = {
+
+}**/
+
+export function createNewGame(): PendingGame {
     return {
         status: 'PENDING',
-        players: new Map<string, PlayerState>(),
-        nextPlayer: new Map<string, string>()
+        initialPrompts: new Map<string, string>()
     };
 }
 
-export function addPlayerToGame(game: Game, player: string, prompt: string, imageUrl: string): boolean {
-    if ( game.status === "RUNNING" ){
-        return false;
-    }
-    // create a new prompt stream for player
-    const playerPromptStream: PromptStream = [{prompt: prompt, image: imageUrl, player: player }];
-
-    game.players.set(player, {current: playerPromptStream, inbox: []});
-
-    return true;
+export function addPlayerToGame(game: PendingGame, player: string, prompt: string) {
+    console.log(`Adding player ${player} to pending game`);
+    game.initialPrompts.set(player, prompt);
 }
 
-export function startGame(game: Game) {
-    const players = [ ...game.players.keys()];
-    
+export function startGame(pending: PendingGame, imageGeneratorFactory: ImageGeneratorFactory) : Game | boolean{
+    const game: Game = {
+        status: 'RUNNING',
+        players: new Map<string, PlayerUnion>(),
+        nextPlayer: new Map<string, string>()
+    }
+
+
+    const players = [ ...pending.initialPrompts.keys()];
+    console.log(`Starting pending game with players ${JSON.stringify(players)}`)
+    const playerQueues = new Map<string, PromptStreamQueue>();
     // create positions map
     for (let i=0; i < players.length - 1; i++) {
         game.nextPlayer.set(players[i], players[i+1]);
+        // all the queues must be created before the image generators
+
     }
 
     game.nextPlayer.set(players[players.length], players[0]);
 
     // update queues
     for (let player in players) {
-        // pop item off player's prompt stream
-        const item = game.players.get(player)?.current;
+        playerQueues.set(player, []);
+    }
 
-        // pass to next player
+    for (let player in players) {
+        // have to get the player and next player inboxes here for type reasons
+        const playerInbox = playerQueues.get(player);
         const nextPlayer = game.nextPlayer.get(player);
 
-        if (item === undefined || item === null || nextPlayer === undefined) {
-            console.log('error')
-            return
+        if (nextPlayer === undefined ) {
+            return false;
         }
-        game.players.get(nextPlayer)?.inbox.push(item);
+
+        const nextPlayerInbox = playerQueues.get(nextPlayer);
+
+        if (playerInbox === undefined || nextPlayerInbox === undefined) {
+            return false;
+        }
+
+        const playerImageGenerator = imageGeneratorFactory(nextPlayerInbox, player);
+        const playerState: PlayerUnion = {
+            status: 'WAITING',
+            inbox: playerInbox,
+            playerImageGenerator: playerImageGenerator
+        }
+
+        game.players.set(player, playerState);
     }
-    
+    console.log(`Done starting game ${JSON.stringify(game)}`);
+    return game;
 }
 
-export function insertPlayerGuess(game: Game, player: string, prompt: string, imageUrl: string) : boolean {
-    // get player state
-    const playerState = game.players.get(player);
-
-    if (playerState === undefined) {
-        return false;
-    }
-
-    // add guess to current
-    const current = playerState.current;
-
-    if (current === undefined || current === null) {
-        return false;
-    }
-
-    current.push({prompt: prompt, player: player, image: imageUrl});
-
-    // push current to inbox of next player
-    const nextPlayer = game.nextPlayer.get(player);
-
-    if (nextPlayer === undefined) {
-        return false;
-    }
-
-    game.players.get(nextPlayer)?.inbox.push(current);
+export function insertPlayerGuess(player: GuessingPlayer, prompt: string) : WaitingPlayer {
+    const playerImageGenerator = player.playerImageGenerator;
+    playerImageGenerator(prompt, player.current);
 
     // set current to null
-    playerState.current = null;
+    const waitingPlayer: WaitingPlayer = {
+        status: 'WAITING',
+        playerImageGenerator: player.playerImageGenerator,
+        inbox: player.inbox
+    }
 
-    return true;
+    return waitingPlayer;
 
 }
 
-export function getImageUrlForPlayer() {
-    // see if current is not null
 
-    // return image url
+
+export function doInboxCheckForPlayer(player: WaitingPlayer) : WaitingPlayer | GuessingPlayer {
+    // if inbox is not empty, return guessing player
+    if (player.inbox.length === 0) {
+        return player;
+    } else {
+        // get first item out of inbox
+        const current = player.inbox.pop();
+
+        // we've already checked inbox length, but whatever
+        if (current === undefined) {
+            return player;
+        }
+
+        const guessingPlayer: GuessingPlayer = {
+            status: 'GUESSING',
+            inbox: player.inbox,
+            current: current, 
+            playerImageGenerator: player.playerImageGenerator
+        };
+        
+        return guessingPlayer;
+    }
+
 
 }
