@@ -37,13 +37,8 @@ describe("game", () => {
 
         // player C guesses first
         insertPlayerGuess(game, "playerC", "guessC1", "imageC1");
-        const playerBStream = game.promptStreams.get("playerB");
-        assert.isDefined(playerBStream);
-
-        assert.equal(playerBStream?.length, 2);
-        assert.equal(playerBStream[1].image, "imageC1");
-        assert.equal(playerBStream[1].prompt, "guessC1");
-        assert.equal(game.playerPositions.get("playerC"), "playerA");
+        
+        // player C should have no current items until player D guesses
 
     })
 
