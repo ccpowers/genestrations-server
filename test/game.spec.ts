@@ -55,10 +55,10 @@ describe("game", () => {
         assert.isTrue(playerC.status === 'GUESSING', 'Player C is not guessing');
         assert(playerC.status === "GUESSING");
         let waitingPlayerC = insertPlayerGuess(playerC, "guessC1");
-        console.log(`Player C after guessing: ${JSON.stringify(playerC)}`)
+        console.log(`Player C after guessing: ${JSON.stringify(waitingPlayerC)}`)
         // player C should have no current items until player B guesses
         let guessingPlayerC = doInboxCheckForPlayer(waitingPlayerC);
-        console.log(`Player C after inbox check: ${JSON.stringify(playerC)}`)
+        console.log(`Player C after inbox check: ${JSON.stringify(guessingPlayerC)}`)
         assert.strictEqual(guessingPlayerC.status, 'WAITING');
 
         // get player B to guess
@@ -77,6 +77,7 @@ describe("game", () => {
         assert.equal(nextPlayerC.status, "GUESSING");
         assert(nextPlayerC.status, "GUESSING")
         let nextGuessPlayerC = nextPlayerC;
+        assert(nextGuessPlayerC.status, 'GUESSING');
         const playerCImageUrl = getImageUrlForGuessingPlayer(nextGuessPlayerC);
         console.log(`${playerCImageUrl}`);
         
@@ -84,8 +85,15 @@ describe("game", () => {
         let playerD = running.players.get("playerD");
         assert(playerD !== undefined && playerD.status === 'WAITING');
         playerD = doInboxCheckForPlayer(playerD);
-        console.log(`${JSON.stringify(playerD.inbox)}`)
+        console.log(`${JSON.stringify(playerD)}`)
     })
 
 
 })
+
+
+/**
+ * TODO: Test concurrency
+ * Make mock image generator that has a hook to 'when' image should be generated
+ * test that image is not in next player's inbox until image is generated
+ */
