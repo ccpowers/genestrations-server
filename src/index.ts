@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import { FinishedGame, Game, 
     GameStatus, 
     PendingGame,
+    PlayerStatus,
+    PromptStream,
     addPlayerToGame,
     createNewGame,
     doFinishedCheckForGame,
@@ -61,16 +63,27 @@ app.post('/register', async (req: RegisterRequest, res: RegisterResponse) => {
     }
 });
 
-type InfoResponse = TypedResponse<{status: GameStatus, players: string[]}>;
+type PlayerInfo = {name: string, status: PlayerStatus};
+type InfoResponse = TypedResponse<{status: GameStatus, players: PlayerInfo[]}>;
 app.get('/info', (req: Request, res: InfoResponse) => {
-    let players: string[] = [];
+    let players: PlayerInfo[] = [];
+
     if (currentGame.status === 'PENDING') {
         const pendingPlayers = [...currentGame.initialPrompts.keys()];
-        players = players.concat(pendingPlayers);
-        console.log(`Got request for players in running game with ${pendingPlayers} ${players}`);
+        for (let p of pendingPlayers) {
+            players.push({name: p, status: 'WAITING'})
+        }
+        console.log(`Got request for players in pending game with ${pendingPlayers} ${players}`);
     } else if (currentGame.status === 'RUNNING') {
-        players = players.concat([...currentGame.players.keys()])
-        console.log(`Got request for players in pending game with ${players}`)
+        for ( let p of currentGame.players ) {
+            players.push({name: p[0], status: p[1].status});
+        }
+        console.log(`Got request for players in running game with ${players}`)
+    } else if (currentGame.status === 'FINISHED') {
+        for ( let p of currentGame.players) {
+            players.push({name: p[0], status: 'FINISHED'});
+        }
+        console.log(`Got request for players in finished game with ${players}`)
     }
     res.json({status: currentGame.status, players: players});
 });
@@ -177,15 +190,20 @@ app.post('/prompt', async (req: Request, res: Response) => {
 });
 
 type FinishedGameRequest = TypedRequestBody<{}>;
-type FinishedGameResponse = TypedResponse<{success: boolean, msg: string}>;
+type InfoObject = { player:string, promptStream: PromptStream};
+type FinishedGameResponse = TypedResponse<{success: boolean, msg: string, info: InfoObject[]}>;
 app.get('/finished', (req: FinishedGameRequest, res: FinishedGameResponse) => {
     currentGame = doFinishedCheckForGame(currentGame);
 
     if (currentGame.status !== 'FINISHED') {
-        res.json({success: false, msg: 'Game is not in finished state.'})
+        res.json({success: false, msg: 'Game is not in finished state.', info: []})
     } else {
         // get info and return it
-        res.json({success: true, msg: 'TODO put stuff here'})
+        const infoObjs: InfoObject[] = [];
+        for(let player of currentGame.players ) {
+            infoObjs.push({player: player[0], promptStream: player[1].promptStream})
+        }
+        res.json({success: true, msg: 'TODO put stuff here', info: infoObjs})
     }
 })
 

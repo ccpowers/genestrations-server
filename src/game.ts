@@ -17,6 +17,7 @@ export type PlayerList = {
     nextPlayer: PlayerList
 }
 
+export type PlayerStatus = 'WAITING' | 'GUESSING' | 'FINISHED';
 export type WaitingPlayer = {
     status: 'WAITING',
 } & PlayerState;
