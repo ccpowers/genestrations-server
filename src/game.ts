@@ -67,8 +67,14 @@ export function startGame(pending: PendingGame, imageGeneratorFactory: ImageGene
         nextPlayer: new Map<string, string>()
     }
 
-
+    // if there are too few players, don't start the game
     const players = [ ...pending.initialPrompts.keys()];
+
+    if (players.length < 3) {
+        console.log(`Attempting to start game with fewer than three players.`);
+        return pending;
+    }
+    
     console.log(`Starting pending game with players ${JSON.stringify(players)}`)
     const playerQueues = new Map<string, PromptStreamQueue>();
     // create positions map

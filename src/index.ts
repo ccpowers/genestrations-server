@@ -77,13 +77,19 @@ app.get('/info', (req: Request, res: InfoResponse) => {
 app.get('/start', (req: Request, res: Response) => {
     if (currentGame.status === 'PENDING') {
         currentGame = startGame(currentGame, imageGeneratorFactory);
-        res.sendStatus(200);
+
+        if (currentGame.status === 'RUNNING') {
+            res.sendStatus(200);
+        } else {
+            res.sendStatus(500);
+        }
     } else {
         res.sendStatus(500);
     }
 });
 
 app.get('/reset', (req: Request, res: Response) => {
+    console.log(`Resetting game`)
     currentGame = createNewGame();
     res.sendStatus(200);
 });
