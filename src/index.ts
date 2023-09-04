@@ -1,9 +1,19 @@
 import express, {Express, Request, Response} from 'express';
 import { Send } from "express-serve-static-core";
 import dotenv from 'dotenv';
-import { Game, GameStatus, PromptStream, createNewGame } from './game';
+import { Game, 
+    GameStatus, 
+    PendingGame,
+    addPlayerToGame,
+    createNewGame,
+    doInboxCheckForPlayer,
+    getImageUrlForGuessingPlayer,
+    insertPlayerGuess,
+    startGame } from './game';
 import cors from 'cors';
-import { generateImage } from './imageGenerator';
+import { imageGeneratorFactory } from './imageGenerator';
+import morgan from 'morgan';
+
 dotenv.config();
 const port = process.env.PORT;
 
@@ -12,11 +22,12 @@ const app = express();
 app.use(cors());
 app.use(express.static('public'))
 app.use(express.json())
+//app.use(morgan('tiny'))
 
 
 
 // initialize global game 
-let currentGame: Game = createNewGame();
+let currentGame: PendingGame | Game = createNewGame();
 
 // define this to make typing requests easier
 export interface TypedRequestBody<T> extends Express.Request {
@@ -34,37 +45,38 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 type RegisterRequest = TypedRequestBody<{player: string, prompt: string}>;
-type RegisterResponse = TypedResponse<{success: boolean, msg?: string, players?: string[]}>;
+type RegisterResponse = TypedResponse<{success: boolean, msg?: string}>;
 app.post('/register', async (req: RegisterRequest, res: RegisterResponse) => {
     console.log(JSON.stringify(req.body));
-    if (currentGame.status === 'PENDING') {
-        // insert into game
-        // todo ensure player has unique name
-        currentGame = addPlayerToGame(currentGame, req.body.player, req.body.prompt);
-        console.log(`Added ${req.body.player} with prompt ${req.body.prompt}`);
+    const player = req.body.player;
+    const prompt = req.body.prompt;
 
-        // kick off request to create image
-        const fn = generateImage(req.body.prompt);
-        playerPromptStream[0].image = (await fn);
-        console.log(`Saved image ${playerPromptStream[0].image}`);
-
-        // return number/names of other players?
-        const players = [ ...currentGame.promptStreams.keys() ];
-        res.json({success: true, msg: '', players: players});
+    if( currentGame.status === 'PENDING') {
+        addPlayerToGame(currentGame, player, prompt);
+        res.json({success: true, msg: 'Welcome to the game!'});
     } else {
-        console.log('Cannot register player when game is running.');
-        res.json({success: false, msg: 'Cannot register while game is in progress', players: []});
+        // return error
+        res.json({success: false, msg: 'Game is not pending'});
     }
 });
 
 type InfoResponse = TypedResponse<{status: GameStatus, players: string[]}>;
 app.get('/info', (req: Request, res: InfoResponse) => {
-    res.json({status: currentGame.status, players: [...currentGame.promptStreams.keys()]});
+    let players: string[] = [];
+    if (currentGame.status === 'PENDING') {
+        const pendingPlayers = [...currentGame.initialPrompts.keys()];
+        players = players.concat(pendingPlayers);
+        console.log(`Got request for players in running game with ${pendingPlayers} ${players}`);
+    } else if (currentGame.status === 'RUNNING') {
+        players = players.concat([...currentGame.players.keys()])
+        console.log(`Got request for players in pending game with ${players}`)
+    }
+    res.json({status: currentGame.status, players: players});
 });
 
 app.get('/start', (req: Request, res: Response) => {
     if (currentGame.status === 'PENDING') {
-        currentGame.status = 'RUNNING';
+        currentGame = startGame(currentGame, imageGeneratorFactory);
         res.sendStatus(200);
     } else {
         res.sendStatus(500);
@@ -78,8 +90,10 @@ app.get('/reset', (req: Request, res: Response) => {
 
 type ImageRequest = TypedRequestBody<{player: string}>;
 type ImageStatus = 'PENDING' | 'READY';
-type ImageResponse = TypedResponse<{success: boolean, msg: string, status: ImageStatus, url: string}>;
-app.get('/image', (req: ImageRequest, res: ImageResponse) => {
+type ImageResponseJson = {success: boolean, msg: string, status: ImageStatus, url: string};
+type ImageResponse = TypedResponse<ImageResponseJson>;
+app.post('/image', (req: ImageRequest, res: ImageResponse) => {
+    console.log(`Checking for images for ${req.body.player}`);
     if (currentGame.status != 'RUNNING') {
         console.log(`Tried to get image when game is not running.`)
         res.json({
@@ -91,36 +105,59 @@ app.get('/image', (req: ImageRequest, res: ImageResponse) => {
     }
 
     // check if player is in game
-    if (!currentGame.promptStreams.has(req.body.player)) {
-        const msg: string = `Player ${req.body.player} not found in game`;
-        console.log(msg);
-        res.json({
-            success: false,
-            msg: msg,
-            status: 'PENDING', 
-            url: ''
-        });
+    // ts should have narrowed the type already, but it did not :shrug:
+    if (currentGame.status === 'RUNNING') {
+        let player = currentGame.players.get(req.body.player);
+        if (player !== undefined) {
+            let resJson: ImageResponseJson = {success: false, msg: `No Image available for ${req.body.player}, player is ${player.status}`, status: 'PENDING', url: ''}
+            if (player.status === 'WAITING') {
+                console.log(`Checking inbox`);
+                player = doInboxCheckForPlayer(player);
+                // alright this is a silly combo of functional programming and mutability
+                // maybe need to make doInbox check take game and return game??
+                currentGame.players.set(req.body.player, player);
+            } 
+
+            // player status may have transitioned after inbox check
+            if (player.status ==='GUESSING') {
+                console.log(`Getting imageurl`)
+                const imgUrl = getImageUrlForGuessingPlayer(player);
+                resJson = { success: true,
+                    msg: '',
+                    status: 'READY',
+                    url: imgUrl
+                }
+            }
+
+            res.json(resJson);
+        }
     }
 
-    // check if image is available yet
-    // TODO how to get image?
-    const imageAvailable: boolean = false;
-    if (!imageAvailable) {
-        res.json({
-            success: true,
-            msg: '',
-            status: 'PENDING', 
-            url: ''
-        })
-    }
 
 });
 
-
-app.get('/prompt', async (req: Request, res: Response) => {
+type PromptRequest = TypedRequestBody<{player: string, prompt: string}>;
+type PromptResponse = TypedResponse<{success: boolean, msg: string}>;
+app.post('/prompt', async (req: Request, res: Response) => {
     // call ai api
-    const fn = generateImage(req.body.prompt);
-    res.send(fn);
+    if ( currentGame.status === 'RUNNING' ) {
+        const prompt = req.body.prompt;
+
+        // get reference to player
+        const player = currentGame.players.get(req.body.player);
+
+        if (player === undefined) {
+            res.json({success: false, msg: `Player ${req.body.player} is not in current game.`});
+        } else if (player.status != 'GUESSING' ) {
+            res.json({success: false, msg: `Player is not in guessing state.`})
+        } else {
+            const nextPlayer = insertPlayerGuess(player, prompt);
+            currentGame.players.set(req.body.player, nextPlayer);
+            res.json({success: true, msg: ''});
+        }
+    } else {
+        res.json({success: false, msg: 'No game is running now.'})
+    }
 });
 
 app.listen(port, () => {

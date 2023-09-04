@@ -57,6 +57,7 @@ export function createNewGame(): PendingGame {
 export function addPlayerToGame(game: PendingGame, player: string, prompt: string) {
     console.log(`Adding player ${player} to pending game`);
     game.initialPrompts.set(player, prompt);
+    console.log(`Game prompts: ${JSON.stringify([...game.initialPrompts.keys()] )}`)
 }
 
 export function startGame(pending: PendingGame, imageGeneratorFactory: ImageGeneratorFactory) : Game | PendingGame {

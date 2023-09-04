@@ -78,8 +78,8 @@ describe("game", () => {
         assert(nextPlayerC.status, "GUESSING")
         let nextGuessPlayerC = nextPlayerC;
         assert(nextGuessPlayerC.status, 'GUESSING');
-        const playerCImageUrl = getImageUrlForGuessingPlayer(nextGuessPlayerC);
-        console.log(`${playerCImageUrl}`);
+        //const playerCImageUrl = getImageUrlForGuessingPlayer(nextGuessPlayerC);
+        //console.log(`${playerCImageUrl}`);
         
         
         let playerD = running.players.get("playerD");
