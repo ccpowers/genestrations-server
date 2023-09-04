@@ -68,6 +68,8 @@ type InfoResponse = TypedResponse<{status: GameStatus, players: PlayerInfo[]}>;
 app.get('/info', (req: Request, res: InfoResponse) => {
     let players: PlayerInfo[] = [];
 
+    currentGame = doFinishedCheckForGame(currentGame);
+    
     if (currentGame.status === 'PENDING') {
         const pendingPlayers = [...currentGame.initialPrompts.keys()];
         for (let p of pendingPlayers) {
