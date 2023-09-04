@@ -1,11 +1,12 @@
 import express, {Express, Request, Response} from 'express';
 import { Send } from "express-serve-static-core";
 import dotenv from 'dotenv';
-import { Game, 
+import { FinishedGame, Game, 
     GameStatus, 
     PendingGame,
     addPlayerToGame,
     createNewGame,
+    doFinishedCheckForGame,
     doInboxCheckForPlayer,
     getImageUrlForGuessingPlayer,
     insertPlayerGuess,
@@ -27,7 +28,7 @@ app.use(express.json())
 
 
 // initialize global game 
-let currentGame: PendingGame | Game = createNewGame();
+let currentGame: PendingGame | Game | FinishedGame = createNewGame();
 
 // define this to make typing requests easier
 export interface TypedRequestBody<T> extends Express.Request {
@@ -116,6 +117,15 @@ app.post('/image', (req: ImageRequest, res: ImageResponse) => {
         let player = currentGame.players.get(req.body.player);
         if (player !== undefined) {
             let resJson: ImageResponseJson = {success: false, msg: `No Image available for ${req.body.player}, player is ${player.status}`, status: 'PENDING', url: ''}
+            
+            if(player.status === 'FINISHED') {
+                resJson = { success: false,
+                    msg: 'Player has already finished',
+                    status: 'PENDING',
+                    url: ''
+                }
+            }
+
             if (player.status === 'WAITING') {
                 console.log(`Checking inbox`);
                 player = doInboxCheckForPlayer(player);
@@ -165,6 +175,19 @@ app.post('/prompt', async (req: Request, res: Response) => {
         res.json({success: false, msg: 'No game is running now.'})
     }
 });
+
+type FinishedGameRequest = TypedRequestBody<{}>;
+type FinishedGameResponse = TypedResponse<{success: boolean, msg: string}>;
+app.get('/finished', (req: FinishedGameRequest, res: FinishedGameResponse) => {
+    currentGame = doFinishedCheckForGame(currentGame);
+
+    if (currentGame.status !== 'FINISHED') {
+        res.json({success: false, msg: 'Game is not in finished state.'})
+    } else {
+        // get info and return it
+        res.json({success: true, msg: 'TODO put stuff here'})
+    }
+})
 
 app.listen(port, () => {
   console.log(`[server]: Server is running at http://localhost:${port}`);

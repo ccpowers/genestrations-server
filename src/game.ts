@@ -26,9 +26,16 @@ export type GuessingPlayer = {
     current: PromptStream
 } & PlayerState;
 
+export type FinishedPlayer = {
+    status: 'FINISHED',
+    promptStream: PromptStream,
+    name: string
+};
+
 export type PlayerState = {
     playerImageGenerator: ImageGenerator,
-    inbox: PromptStreamQueue
+    inbox: PromptStreamQueue,
+    name: string
 }
 
 export type PendingGame = {
@@ -36,16 +43,17 @@ export type PendingGame = {
     initialPrompts: Map<string, string>
 }
 
-export type PlayerUnion = (GuessingPlayer | WaitingPlayer);
+export type PlayerUnion = (GuessingPlayer | WaitingPlayer | FinishedPlayer);
 export type Game = {
     status: 'RUNNING',
     players: Map<string, PlayerUnion>,
     nextPlayer: Map<string, string>,
 }
 
-/**export type FinalizedGame = {
-
-}**/
+export type FinishedGame = {
+    status: 'FINISHED',
+    players: Map<string, FinishedPlayer>
+}
 
 export function createNewGame(): PendingGame {
     return {
@@ -74,7 +82,7 @@ export function startGame(pending: PendingGame, imageGeneratorFactory: ImageGene
         console.log(`Attempting to start game with fewer than three players.`);
         return pending;
     }
-    
+
     console.log(`Starting pending game with players ${JSON.stringify(players)}`)
     const playerQueues = new Map<string, PromptStreamQueue>();
     // create positions map
@@ -119,6 +127,7 @@ export function startGame(pending: PendingGame, imageGeneratorFactory: ImageGene
         playerImageGenerator(playerInitialPrompt, [])
         const playerState: WaitingPlayer = {
             status: 'WAITING',
+            name: player,
             inbox: playerInbox,
             playerImageGenerator: playerImageGenerator
         }
@@ -140,6 +149,7 @@ export function insertPlayerGuess(player: GuessingPlayer, prompt: string) : Wait
     // set current to null
     const waitingPlayer: WaitingPlayer = {
         status: 'WAITING',
+        name: player.name,
         playerImageGenerator: player.playerImageGenerator,
         inbox: player.inbox
     }
@@ -148,7 +158,7 @@ export function insertPlayerGuess(player: GuessingPlayer, prompt: string) : Wait
 
 }
 
-export function doInboxCheckForPlayer(player: WaitingPlayer) : WaitingPlayer | GuessingPlayer {
+export function doInboxCheckForPlayer(player: WaitingPlayer) : WaitingPlayer | GuessingPlayer | FinishedPlayer {
     // if inbox is not empty, return guessing player
     if (player.inbox.length === 0) {
         return player;
@@ -160,11 +170,29 @@ export function doInboxCheckForPlayer(player: WaitingPlayer) : WaitingPlayer | G
         if (current === undefined) {
             return player;
         }
+        
+        if (current.length === 0) {
+            // this is an error!! 
+            console.log(`Why is prompt stream length 0??`);
+            return player;
+        } else {
+            const firstPrompt = current[0];
+            if (firstPrompt.player == player.name) {
+                console.log(`Player ${player.name} got their own stack back, they are done!`);
+
+                return {
+                    status: 'FINISHED',
+                    name: player.name,
+                    promptStream: current
+                };
+            }
+        }
 
         const guessingPlayer: GuessingPlayer = {
             status: 'GUESSING',
             inbox: player.inbox,
             current: current, 
+            name: player.name,
             playerImageGenerator: player.playerImageGenerator
         };
         
@@ -176,4 +204,34 @@ export function doInboxCheckForPlayer(player: WaitingPlayer) : WaitingPlayer | G
 
 export function getImageUrlForGuessingPlayer(player: GuessingPlayer) : string {
     return player.current[player.current.length-1].image;
+}
+
+export function doFinishedCheckForGame(game: Game | FinishedGame | PendingGame) : Game | FinishedGame | PendingGame {
+    // if game is already done, return
+    if (game.status === 'FINISHED' || game.status === 'PENDING') {
+        return game;
+    }
+    
+    // check if all players are finished
+    let allFinished = true;
+
+    const finishedGame: FinishedGame = {
+        status: 'FINISHED',
+        players: new Map<string, FinishedPlayer>()
+    }
+
+    for (let player of game.players) {
+        if (player[1].status === 'FINISHED') {
+            finishedGame.players.set(player[0], player[1]);
+        } else {
+            allFinished = false;
+            console.log(`Game is not over, player ${player[0]} is not finished.`);
+        }
+    }
+
+    if( !allFinished ) {
+        return game;
+    } else {
+        return finishedGame;
+    }
 }
